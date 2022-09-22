@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"go.mongodb.org/mongo-driver/mongo"
 	"io/ioutil"
@@ -11,11 +12,11 @@ import (
 
 type Worker interface {
 	Close() error
-	ReadMessage()
+	Start()
 	WriteMessage(msg []byte)
-	SubscribeKline(symbol string, period string)
+	SubscribeTradeDetail(symbol string)
 	HistoryKline(symbol string, period string) ([]*KLine, error)
-	ReadKlineCh() *KLineCh
+	ReadTradeDetailCh() *TradeDetailCh
 }
 
 type KLine struct {
@@ -29,10 +30,10 @@ type KLine struct {
 	Count  int
 }
 
-type KLineCh struct {
-	Symbol string
-	Period string
-	KLine
+type TradeDetailCh struct {
+	Time   int64
+	Amount float64
+	Price  float64
 }
 
 type ConCurrentEngine struct {
@@ -54,21 +55,12 @@ func (c *ConCurrentEngine) Start() {
 // loop 循环监听
 func (c *ConCurrentEngine) loop() {
 
-	// 监听ws
-	go c.worker.ReadMessage()
-
-	// 订阅
-	for _, symbol := range c.config.Symbols {
-		for _, period := range c.config.Periods {
-			go c.worker.SubscribeKline(symbol, period)
-			go c.saveHistory(symbol, period)
-		}
-	}
+	go c.worker.Start()
 
 	// 循环读取
 	for {
-		kLineCh := c.worker.ReadKlineCh()
-		fmt.Println("推送", kLineCh)
+		tradeDetailCh := c.worker.ReadTradeDetailCh()
+		fmt.Println("推送", tradeDetailCh)
 	}
 
 }
@@ -90,17 +82,35 @@ func NewEngine(db *mongo.Database, config *config.EngineConfig) (*ConCurrentEngi
 	var err error
 	switch config.Platform {
 	case "huobi":
-		worker, err = NewHuoBiWorker(config.ProxyUrl, config.WsUrl, config.HttpUrl)
+		worker, err = NewHuoBiWorker(config)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return &ConCurrentEngine{
+	c := &ConCurrentEngine{
 		worker: worker,
 		Db:     db,
 		config: config,
-	}, nil
+	}
+
+	// 获取历史数据
+	for _, symbol := range c.config.Symbols {
+		for _, period := range c.config.Periods {
+			fmt.Printf("正在获取%s交易对：%s -- %s 的历史记录", c.config.Platform, symbol, period)
+			findOne := db.Collection(getCollectionName(symbol, period)).FindOne(context.TODO(), nil)
+			if findOne == nil {
+				fmt.Println("请求")
+				c.saveHistory(symbol, period)
+			}
+		}
+	}
+
+	return c, nil
+}
+
+func getCollectionName(symbol string, period string) string {
+	return symbol + "_" + period
 }
 
 func GZIPDe(in []byte) ([]byte, error) {
