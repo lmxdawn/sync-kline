@@ -17,7 +17,7 @@ func Start(isSwag bool, configPath string) {
 		panic("Failed to load configuration")
 	}
 
-	db, err := mongo.NewKline(conf.Mongo.Uri)
+	db, err := mongo.NewTrade(conf.Mongo.Uri)
 	if err != nil {
 		panic(err)
 	}

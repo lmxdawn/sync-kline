@@ -23,13 +23,13 @@ func NewClient(uri string) (*mongo.Client, error) {
 	return mgoCli, nil
 }
 
-func NewKline(uri string) (*mongo.Database, error) {
+func NewTrade(uri string) (*mongo.Database, error) {
 	client, err := NewClient(uri)
 	if err != nil {
 		return nil, err
 	}
 
-	db := client.Database("kline")
+	db := client.Database("trade")
 
 	return db, nil
 }

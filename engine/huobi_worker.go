@@ -92,7 +92,7 @@ func (w *HuoBiWorker) readMessage() {
 		if err != nil {
 			continue
 		}
-		log.Printf("recv: %s", string(bytes))
+		//log.Printf("recv: %s", string(bytes))
 
 		var res HuoBiWsMessageRes
 		err = json.Unmarshal(bytes, &res)
@@ -128,7 +128,14 @@ func (w *HuoBiWorker) formatTradeDetail(res *HuoBiWsMessageRes) {
 		return
 	}
 
-	fmt.Println(ch, tick)
+	for _, item := range tick.Data {
+		w.tradeDetailCh <- &TradeDetailCh{
+			Symbol: ch[1],
+			Time:   tick.Ts,
+			Amount: item.Amount,
+			Price:  item.Price,
+		}
+	}
 }
 
 func (w *HuoBiWorker) WriteMessage(msg []byte) {
