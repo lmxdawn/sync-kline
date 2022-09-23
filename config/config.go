@@ -22,9 +22,9 @@ type EngineConfig struct {
 }
 
 type Config struct {
-	App     AppConfig
-	Mongo   MongoConfig
-	Engines []EngineConfig
+	App    AppConfig
+	Mongo  MongoConfig
+	Engine EngineConfig
 }
 
 func NewConfig(confPath string) (Config, error) {

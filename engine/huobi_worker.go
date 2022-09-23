@@ -131,7 +131,7 @@ func (w *HuoBiWorker) formatTradeDetail(res *HuoBiWsMessageRes) {
 	for _, item := range tick.Data {
 		w.tradeDetailCh <- &TradeDetailCh{
 			Symbol: ch[1],
-			Time:   tick.Ts,
+			Time:   tick.Ts / 1000,
 			Amount: item.Amount,
 			Price:  item.Price,
 		}

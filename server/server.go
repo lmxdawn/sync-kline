@@ -22,19 +22,11 @@ func Start(isSwag bool, configPath string) {
 		panic(err)
 	}
 
-	var engines []*engine.ConCurrentEngine
-	for _, engineConfig := range conf.Engines {
-		eng, err := engine.NewEngine(db, &engineConfig)
-		if err != nil {
-			panic(fmt.Sprintf("eth run err：%v", err))
-		}
-		engines = append(engines, eng)
+	eng, err := engine.NewEngine(db, &conf.Engine)
+	if err != nil {
+		panic(fmt.Sprintf("eth run err：%v", err))
 	}
-
-	// 启动监听器
-	for _, currentEngine := range engines {
-		go currentEngine.Start()
-	}
+	go eng.Start()
 
 	if isSwag {
 		gin.SetMode(gin.DebugMode)

@@ -109,7 +109,7 @@ func (c *ConCurrentEngine) loop() {
 		tradeDetailCh := c.worker.ReadTradeDetailCh()
 
 		for period := range timeMap {
-			c.createKLine(tradeDetailCh.Symbol, period, tradeDetailCh.Price, tradeDetailCh.Amount)
+			c.createKLine(tradeDetailCh.Time, tradeDetailCh.Symbol, period, tradeDetailCh.Price, tradeDetailCh.Amount)
 		}
 
 		//fmt.Println("推送", tradeDetailCh)
@@ -135,11 +135,11 @@ func (c *ConCurrentEngine) saveHistory(symbol string, period string) {
 	}
 }
 
-func (c *ConCurrentEngine) createKLine(symbol string, period string, price float64, amount float64) {
+func (c *ConCurrentEngine) createKLine(ts int64, symbol string, period string, price float64, amount float64) {
 
-	currentTime, _ := createDateTime(periodMap[period], 0, 1)
+	currentTime, _ := createDateTime(ts, periodMap[period], 0, 1)
 
-	filter := bson.D{{"time", currentTime}}
+	filter := bson.M{"time": currentTime}
 	isAdd := false
 	findOne := c.Db.Collection(getCollectionName(symbol, period)).FindOne(context.TODO(), filter)
 	var kLine KLine
@@ -191,7 +191,8 @@ func (c *ConCurrentEngine) createKLine(symbol string, period string, price float
 			return
 		}
 	} else {
-		_, err := c.Db.Collection(getCollectionName(symbol, period)).UpdateOne(context.TODO(), filter, kLine)
+		update := bson.M{"$set": kLine}
+		_, err := c.Db.Collection(getCollectionName(symbol, period)).UpdateOne(context.TODO(), filter, update)
 		if err != nil {
 			return
 		}
@@ -238,7 +239,7 @@ func getCollectionName(symbol string, period string) string {
 	return strings.ToLower(symbol) + "_" + periodMap[period]
 }
 
-func createDateTime(period string, currentTime int64, limit int) (int64, int64) {
+func createDateTime(ts int64, period string, currentTime int64, limit int) (int64, int64) {
 
 	prevTime := int64(0)
 	timeValue, ok := timeMap[period]
@@ -248,7 +249,7 @@ func createDateTime(period string, currentTime int64, limit int) (int64, int64) 
 
 	// 月份的处理方式不一样
 	if "1mon" == period {
-		d := time.Now()
+		d := time.Unix(ts, 0)
 		d = time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, d.Location())
 		currentTime = d.Unix()
 		// 设置上一个时间
@@ -256,7 +257,7 @@ func createDateTime(period string, currentTime int64, limit int) (int64, int64) 
 		prevTime = d.Unix()
 
 	} else if "1year" == period {
-		d := time.Now()
+		d := time.Unix(ts, 0)
 		d = time.Date(d.Year(), 1, 1, 0, 0, 0, 0, d.Location())
 		currentTime = d.Unix()
 		// 设置上一个时间
@@ -264,12 +265,11 @@ func createDateTime(period string, currentTime int64, limit int) (int64, int64) 
 		prevTime = d.Unix()
 
 	} else {
-		nowTime := time.Now().Unix()
 
 		if currentTime <= 0 {
-			currentTime = nowTime
+			currentTime = ts
 			if timeValue != 0 {
-				currentTime -= nowTime % timeValue
+				currentTime -= ts % timeValue
 			}
 		}
 		if timeSubValue, ok := timeSubMap[period]; ok {

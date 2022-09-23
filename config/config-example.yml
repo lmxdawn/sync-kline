@@ -4,12 +4,12 @@ app:
 mongo:
   uri: mongodb://127.0.0.1:27017
 
-engines:
-  - platform: huobi
-    proxy_url: http://127.0.0.1:10809
-    ws_url: wss://api.huobi.pro/ws
-    http_url: https://api.huobi.pro
-    symbols:
-      - btcusdt
-    periods:
-      - 1min
+engine:
+  platform: huobi
+  proxy_url: http://127.0.0.1:10809
+  ws_url: wss://api.huobi.pro/ws
+  http_url: https://api.huobi.pro
+  symbols:
+    - btcusdt
+  periods:
+    - 1min
