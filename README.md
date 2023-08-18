@@ -28,13 +28,13 @@ $ wallet -c config/config-example.yml
 
 # 配置文件参数解释
 
-|  参数名   | 描述  |
-|  ----  | ----  |
-| app.port  | 启动端口 |
-| mysql.host  | MySQL的主机ip |
-| mysql.port  | MySQL的端口 |
-| mysql.db  | MySQL的数据库名 |
-| mysql.user_name  | MySQL的登录用户 |
+| 参数名             | 描述         |
+|-----------------|------------|
+| app.port        | 启动端口       |
+| mysql.host      | MySQL的主机ip |
+| mysql.port      | MySQL的端口   |
+| mysql.db        | MySQL的数据库名 |
+| mysql.user_name | MySQL的登录用户 |
 | mysql.password  | MySQL的登录密码 |
 
 # 第三方库依赖
