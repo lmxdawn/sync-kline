@@ -2,7 +2,7 @@ app:
   port: 10005
 
 mongo:
-  uri: mongodb://127.0.0.1:27017
+  uri: mongodb://192.168.10.181:27017
 
 engine:
   platform: huobi
