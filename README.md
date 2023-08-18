@@ -11,8 +11,6 @@
 
 > MySQL 5.7
 
-> MySQL 创建一个数据库，然后导入 `wallet.sql` 文件
-
 # 下载-打包
 
 ```shell
