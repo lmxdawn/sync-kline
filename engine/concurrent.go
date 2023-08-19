@@ -8,7 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"io/ioutil"
+	"io"
 	"math"
 	"strings"
 	"sync-kline/config"
@@ -288,5 +288,5 @@ func GZIPDe(in []byte) ([]byte, error) {
 		return out, err
 	}
 	defer reader.Close()
-	return ioutil.ReadAll(reader)
+	return io.ReadAll(reader)
 }
