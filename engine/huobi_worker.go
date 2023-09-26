@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/mitchellh/mapstructure"
+	"github.com/shopspring/decimal"
 	"log"
 	"net/http"
 	"net/url"
@@ -132,8 +133,8 @@ func (w *HuoBiWorker) formatTradeDetail(res *HuoBiWsMessageRes) {
 		w.tradeDetailCh <- &TradeDetailCh{
 			Symbol: ch[1],
 			Time:   tick.Ts / 1000,
-			Amount: item.Amount,
-			Price:  item.Price,
+			Amount: decimal.NewFromFloat(item.Amount),
+			Price:  decimal.NewFromFloat(item.Price),
 		}
 	}
 }
@@ -188,12 +189,12 @@ func (w *HuoBiWorker) HistoryKline(symbol string, period string) ([]*KLine, erro
 	for _, item := range data {
 		klines = append(klines, &KLine{
 			Time:   item.Id,
-			Open:   item.Open,
-			Close:  item.Close,
-			Low:    item.Low,
-			High:   item.High,
-			Amount: item.Amount,
-			Vol:    item.Vol,
+			Open:   decimal.NewFromFloat(item.Open).String(),
+			Close:  decimal.NewFromFloat(item.Close).String(),
+			Low:    decimal.NewFromFloat(item.Low).String(),
+			High:   decimal.NewFromFloat(item.High).String(),
+			Amount: decimal.NewFromFloat(item.Amount).String(),
+			Vol:    decimal.NewFromFloat(item.Vol).String(),
 			Count:  item.Count,
 		})
 	}

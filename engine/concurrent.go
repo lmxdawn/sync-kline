@@ -8,8 +8,8 @@ import (
 	"github.com/shopspring/decimal"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"io"
-	"math"
 	"strings"
 	"sync-kline/config"
 	"time"
@@ -25,21 +25,21 @@ type Worker interface {
 }
 
 type KLine struct {
-	Time   int64
-	Open   float64
-	Close  float64
-	Low    float64
-	High   float64
-	Amount float64
-	Vol    float64
-	Count  int
+	Time   int64  `json:"time"`   // 时间
+	Open   string `json:"open"`   // 开盘
+	Close  string `json:"close"`  // 收盘
+	Low    string `json:"low"`    // 最低
+	High   string `json:"high"`   // 最高
+	Amount string `json:"amount"` // 数量
+	Vol    string `json:"vol"`    // 成交额
+	Count  int    `json:"count"`  // 成交数量
 }
 
 type TradeDetailCh struct {
 	Symbol string
 	Time   int64
-	Amount float64
-	Price  float64
+	Amount decimal.Decimal
+	Price  decimal.Decimal
 }
 
 type ConCurrentEngine struct {
@@ -89,6 +89,8 @@ var (
 	}
 )
 
+var decimal0 = decimal.NewFromInt(0)
+
 // Start 启动
 func (c *ConCurrentEngine) Start() {
 
@@ -109,7 +111,7 @@ func (c *ConCurrentEngine) loop() {
 		tradeDetailCh := c.worker.ReadTradeDetailCh()
 
 		for period := range timeMap {
-			c.createKLine(tradeDetailCh.Time, tradeDetailCh.Symbol, period, tradeDetailCh.Price, tradeDetailCh.Amount)
+			c.KLineCreate("", tradeDetailCh.Symbol, tradeDetailCh.Time, period, tradeDetailCh.Price, tradeDetailCh.Amount)
 		}
 
 		//fmt.Println("推送", tradeDetailCh)
@@ -128,31 +130,44 @@ func (c *ConCurrentEngine) saveHistory(symbol string, period string) {
 	for i, kLine := range kLines {
 		data[i] = kLine
 	}
-	_, err = c.Db.Collection(getCollectionName(symbol, period)).InsertMany(context.TODO(), data)
+	_, err = c.Db.Collection(klineGetCollectionName(symbol, period)).InsertMany(context.TODO(), data)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 }
 
-func (c *ConCurrentEngine) createKLine(ts int64, symbol string, period string, price float64, amount float64) {
+func (c *ConCurrentEngine) KLineDatabase(name string) *mongo.Database {
 
-	currentTime, _ := createDateTime(ts, periodMap[period], 0, 1)
+	return c.Db
+}
+
+func (c *ConCurrentEngine) KLineCreateAll(name string, pair string, ts int64, price decimal.Decimal, amount decimal.Decimal) {
+
+	for period := range timeMap {
+		c.KLineCreate(name, pair, ts, period, price, amount)
+	}
+
+}
+
+func (c *ConCurrentEngine) KLineCreate(name string, pair string, ts int64, period string, price decimal.Decimal, amount decimal.Decimal) {
+
+	currentTime, _ := klineCreateDateTime(ts, periodMap[period], 0, 1)
 
 	filter := bson.M{"time": currentTime}
 	isAdd := false
-	findOne := c.Db.Collection(getCollectionName(symbol, period)).FindOne(context.TODO(), filter)
+	findOne := c.KLineDatabase(name).Collection(klineGetCollectionName(pair, period)).FindOne(context.TODO(), filter)
 	var kLine KLine
 	if findOne.Err() != nil {
 		isAdd = true
 		kLine = KLine{
 			Time:   0,
-			Open:   0,
-			Close:  0,
-			Low:    0,
-			High:   0,
-			Amount: 0,
-			Vol:    0,
+			Open:   decimal0.String(),
+			Close:  decimal0.String(),
+			Low:    decimal0.String(),
+			High:   decimal0.String(),
+			Amount: decimal0.String(),
+			Vol:    decimal0.String(),
 			Count:  0,
 		}
 	} else {
@@ -163,83 +178,97 @@ func (c *ConCurrentEngine) createKLine(ts int64, symbol string, period string, p
 	}
 
 	kLine.Time = currentTime
-	if kLine.Open <= 0 {
-		kLine.Open = price
+	open, _ := decimal.NewFromString(kLine.Open)
+	if open.Cmp(decimal0) <= 0 {
+		kLine.Open = price.String()
 	}
-	kLine.Close = price
-	if kLine.Low <= 0 {
-		kLine.Low = price
+	kLine.Close = price.String()
+	low, _ := decimal.NewFromString(kLine.Low)
+	if low.Cmp(decimal0) <= 0 {
+		kLine.Low = price.String()
 	} else {
-		kLine.Low = math.Min(kLine.Low, price)
+		kLine.Low = decimal.Min(low, price).String()
 	}
-	if kLine.High <= 0 {
-		kLine.High = price
+	high, _ := decimal.NewFromString(kLine.High)
+	if high.Cmp(decimal0) <= 0 {
+		kLine.High = price.String()
 	} else {
-		kLine.High = math.Max(kLine.High, price)
+		kLine.High = decimal.Max(high, price).String()
 	}
 
-	amountD := decimal.NewFromFloat(amount)
-	priceD := decimal.NewFromFloat(price)
-
-	kLine.Amount = decimal.NewFromFloat(kLine.Amount).Add(amountD).InexactFloat64()
-	kLine.Vol = decimal.NewFromFloat(kLine.Vol).Add(amountD.Mul(priceD)).InexactFloat64()
+	amountOld, _ := decimal.NewFromString(kLine.Amount)
+	volOld, _ := decimal.NewFromString(kLine.Vol)
+	kLine.Amount = amountOld.Add(amount).String()
+	kLine.Vol = volOld.Add(amount.Mul(price)).String()
 	kLine.Count += 1
 
 	if isAdd {
-		_, err := c.Db.Collection(getCollectionName(symbol, period)).InsertOne(context.TODO(), kLine)
+		_, err := c.KLineDatabase(name).Collection(klineGetCollectionName(pair, period)).InsertOne(context.TODO(), kLine)
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
 	} else {
 		update := bson.M{"$set": kLine}
-		_, err := c.Db.Collection(getCollectionName(symbol, period)).UpdateOne(context.TODO(), filter, update)
+		_, err := c.KLineDatabase(name).Collection(klineGetCollectionName(pair, period)).UpdateOne(context.TODO(), filter, update)
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
 	}
 
 }
 
-// NewEngine 创建ETH
-func NewEngine(db *mongo.Database, config *config.EngineConfig) (*ConCurrentEngine, error) {
+func (c *ConCurrentEngine) KlinePeriod() []string {
 
-	var worker Worker
-	var err error
-	switch config.Platform {
-	case "huobi":
-		worker, err = NewHuoBiWorker(config)
-		if err != nil {
-			return nil, err
-		}
+	var periods []string
+
+	for period := range timeMap {
+		periods = append(periods, period)
 	}
 
-	c := &ConCurrentEngine{
-		worker: worker,
-		Db:     db,
-		config: config,
-	}
-
-	// 获取历史数据
-	for _, symbol := range c.config.Symbols {
-		for _, period := range c.config.Periods {
-			fmt.Printf("正在获取%s交易对：%s -- %s 的历史记录\n", c.config.Platform, symbol, period)
-			findOne := db.Collection(getCollectionName(symbol, period)).FindOne(context.TODO(), nil)
-			if findOne.Err() != nil {
-				fmt.Println("请求", findOne.Err())
-				c.saveHistory(symbol, period)
-			}
-		}
-	}
-
-	return c, nil
+	return periods
 }
 
-func getCollectionName(symbol string, period string) string {
+func (c *ConCurrentEngine) KlineHistory(name string, pair string, period string, lastTime int64) ([]*KLine, error) {
+
+	var kLines []*KLine
+
+	filter := bson.M{}
+
+	if lastTime > 0 {
+		filter = bson.M{"time": bson.M{"$lt": lastTime}}
+	}
+
+	// 定义分页参数
+	page := 1       // 当前页数
+	pageSize := 200 // 每页条数
+	skip := (page - 1) * pageSize
+
+	findOptions := options.Find()
+	findOptions.SetSkip(int64(skip))
+	findOptions.SetLimit(int64(pageSize))
+	findOptions.SetSort(bson.M{"time": -1}) // 时间降序
+
+	cur, err := c.KLineDatabase(name).Collection(klineGetCollectionName(pair, period)).Find(context.Background(), filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(context.Background())
+	err = cur.All(context.Background(), &kLines)
+	if err != nil {
+		return nil, err
+	}
+
+	return kLines, nil
+}
+
+func klineGetCollectionName(pair string, period string) string {
 	//fmt.Println("名称", period, periodMap[period])
-	return strings.ToLower(symbol) + "_" + periodMap[period]
+	return strings.ToLower(pair) + "_" + periodMap[period]
 }
 
-func createDateTime(ts int64, period string, currentTime int64, limit int) (int64, int64) {
+func klineCreateDateTime(ts int64, period string, currentTime int64, limit int) (int64, int64) {
 
 	prevTime := int64(0)
 	timeValue, ok := timeMap[period]
@@ -279,6 +308,40 @@ func createDateTime(ts int64, period string, currentTime int64, limit int) (int6
 	}
 
 	return currentTime, prevTime
+}
+
+// NewEngine 创建ETH
+func NewEngine(db *mongo.Database, config *config.EngineConfig) (*ConCurrentEngine, error) {
+
+	var worker Worker
+	var err error
+	switch config.Platform {
+	case "huobi":
+		worker, err = NewHuoBiWorker(config)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	c := &ConCurrentEngine{
+		worker: worker,
+		Db:     db,
+		config: config,
+	}
+
+	// 获取历史数据
+	for _, symbol := range c.config.Symbols {
+		for _, period := range c.config.Periods {
+			fmt.Printf("正在获取%s交易对：%s -- %s 的历史记录\n", c.config.Platform, symbol, period)
+			findOne := db.Collection(klineGetCollectionName(symbol, period)).FindOne(context.TODO(), nil)
+			if findOne.Err() != nil {
+				fmt.Println("请求", findOne.Err())
+				c.saveHistory(symbol, period)
+			}
+		}
+	}
+
+	return c, nil
 }
 
 func GZIPDe(in []byte) ([]byte, error) {
